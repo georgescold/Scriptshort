@@ -1,0 +1,14 @@
+{
+  "name": "scriptshort",
+  "version": "1.0.0",
+  "description": "App web locale : dépose une vidéo, récupère-la avec sous-titres automatiques (Whisper + FFmpeg)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "setup:py": "pip install -r requirements.txt"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

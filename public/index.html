@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scriptshort — Studio de sous-titres</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="head">
+      <h1>🎬 Scriptshort</h1>
+      <p class="sub">Dépose une vidéo → teste plusieurs styles → exporte. 100&nbsp;% local, gratuit.</p>
+    </header>
+
+    <div id="depsWarning" class="banner hidden"></div>
+
+    <!-- VUE 1 : Upload -->
+    <section id="uploadView">
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="fileInput" accept="video/*" hidden />
+        <div class="dz-inner">
+          <div class="dz-icon">⬆️</div>
+          <p class="dz-title">Glisse ta vidéo ici</p>
+          <p class="dz-or">ou <button type="button" id="browseBtn" class="link">parcours tes fichiers</button></p>
+          <p class="dz-hint">MP4, MOV, MKV, WEBM… jusqu'à 2&nbsp;Go</p>
+        </div>
+        <div id="fileChosen" class="file-chosen hidden"></div>
+      </div>
+
+      <div class="opt-row">
+        <div class="opt-group">
+          <label class="opt-label" for="language">Langue</label>
+          <select id="language">
+            <option value="auto">Détection auto</option>
+            <option value="fr" selected>Français</option>
+            <option value="en">Anglais</option>
+            <option value="es">Espagnol</option>
+            <option value="de">Allemand</option>
+            <option value="it">Italien</option>
+            <option value="pt">Portugais</option>
+          </select>
+        </div>
+        <div class="opt-group">
+          <label class="opt-label" for="model">Qualité de la transcription</label>
+          <select id="model">
+            <option value="base">Rapide — qualité correcte</option>
+            <option value="small" selected>Recommandé — bon équilibre ✓</option>
+            <option value="medium">Haute qualité — plus lent</option>
+            <option value="large-v3">Qualité maximale — lent</option>
+          </select>
+        </div>
+      </div>
+      <p class="field-note">Plus la qualité est élevée, plus la transcription est précise mais lente. Le modèle se télécharge une seule fois, puis tout reste gratuit et sur ton PC.</p>
+
+      <button id="importBtn" class="generate" disabled>Importer &amp; transcrire</button>
+    </section>
+
+    <!-- VUE 2 : Transcription en cours -->
+    <section id="transcribeView" class="progress-section hidden">
+      <p id="trStage" class="stage">Transcription…</p>
+      <div class="bar"><div id="trBar" class="bar-fill"></div></div>
+      <p id="trPct" class="pct">0&nbsp;%</p>
+      <p class="note">⏳ Au tout premier lancement, le modèle Whisper se télécharge une fois.</p>
+    </section>
+
+    <!-- VUE 3 : Studio -->
+    <section id="studioView" class="studio hidden">
+      <div class="studio-grid">
+        <!-- Contrôles -->
+        <div class="controls">
+          <div class="opt-group">
+            <label class="opt-label">Modèle de style</label>
+            <div class="templates" id="templates"></div>
+          </div>
+
+          <div class="opt-row">
+            <div class="opt-group">
+              <label class="opt-label" for="mode">Découpage</label>
+              <select id="mode">
+                <option value="word">Mot à mot (karaoké)</option>
+                <option value="segment">Phrase entière</option>
+              </select>
+            </div>
+            <div class="opt-group">
+              <label class="opt-label" for="font">Police</label>
+              <select id="font"></select>
+            </div>
+          </div>
+
+          <div class="opt-row">
+            <div class="opt-group">
+              <label class="opt-label" for="animation">Animation</label>
+              <select id="animation">
+                <option value="none">Aucune</option>
+                <option value="fade">Fondu</option>
+                <option value="pop">Pop</option>
+                <option value="bounce">Rebond</option>
+              </select>
+            </div>
+            <div class="opt-group" id="wordsGroup">
+              <label class="opt-label" for="maxWords">Mots/ligne : <span id="maxWordsVal">3</span></label>
+              <input type="range" id="maxWords" min="1" max="5" value="3" />
+            </div>
+          </div>
+
+          <div class="opt-row">
+            <div class="opt-group">
+              <label class="opt-label" for="fontScale">Taille : <span id="fontScaleVal">100</span>%</label>
+              <input type="range" id="fontScale" min="60" max="170" value="100" />
+            </div>
+            <div class="opt-group">
+              <label class="opt-label" for="posY">Hauteur : <span id="posYVal">33</span></label>
+              <input type="range" id="posY" min="0" max="100" value="33" />
+            </div>
+          </div>
+
+          <div class="opt-row">
+            <div class="opt-group color-ctrl" data-color="textColor">
+              <label class="opt-label">Texte</label>
+              <div class="color-row">
+                <input type="color" id="textColor" value="#FFFFFF" />
+                <input type="text" id="textColorHex" class="hex" maxlength="7" value="#FFFFFF" spellcheck="false" />
+              </div>
+            </div>
+            <div class="opt-group color-ctrl" data-color="highlightColor" id="highlightGroup">
+              <label class="opt-label">Surligné</label>
+              <div class="color-row">
+                <input type="color" id="highlightColor" value="#FFE000" />
+                <input type="text" id="highlightColorHex" class="hex" maxlength="7" value="#FFE000" spellcheck="false" />
+              </div>
+            </div>
+            <div class="opt-group color-ctrl" data-color="outlineColor">
+              <label class="opt-label">Contour</label>
+              <div class="color-row">
+                <input type="color" id="outlineColor" value="#000000" />
+                <input type="text" id="outlineColorHex" class="hex" maxlength="7" value="#000000" spellcheck="false" />
+              </div>
+            </div>
+          </div>
+
+          <div class="opt-group">
+            <div class="fav-head">
+              <label class="opt-label" style="margin:0">Couleurs favorites</label>
+              <button type="button" id="favAdd" class="mini-btn">＋ Enregistrer</button>
+            </div>
+            <div class="fav-colors" id="favColors"></div>
+          </div>
+
+          <label class="checkbox"><input type="checkbox" id="uppercase" checked /> Tout en MAJUSCULES</label>
+          <label class="checkbox"><input type="checkbox" id="punctuation" /> Garder la ponctuation (. , ! ?)</label>
+
+          <button type="button" id="editTextBtn" class="edit-text-btn">✏️ Corriger / ajouter des sous-titres</button>
+        </div>
+
+        <!-- Aperçu -->
+        <div class="preview">
+          <div class="preview-frame" id="previewFrame">
+            <video id="previewVideo" class="hidden" controls autoplay playsinline></video>
+            <div id="livePreview" class="live-wrap">
+              <div id="liveStage" class="live-stage">
+                <div id="liveLine" class="live-caption"><span id="liveInner" class="lp-inner"></span></div>
+              </div>
+            </div>
+            <div id="renderOverlay" class="render-overlay hidden">
+              <p id="renderStage">Génération…</p>
+              <div class="bar small"><div id="renderBar" class="bar-fill"></div></div>
+              <p id="renderPct" class="pct">0&nbsp;%</p>
+            </div>
+          </div>
+          <p class="live-hint" id="liveHint">✨ Aperçu en direct du style. « Générer l'aperçu » fait le vrai rendu sur ta vidéo.</p>
+          <button id="previewBtn" class="preview-btn">👁️ Générer l'aperçu réel (5&nbsp;s)</button>
+          <button id="finalBtn" class="generate">🎬 Lancer le rendu final</button>
+          <div class="secondary-actions">
+            <a id="finalDownload" class="download hidden" href="#" download>⬇️ Télécharger la vidéo</a>
+            <button id="srtBtn" class="link">Télécharger les sous-titres .srt</button>
+          </div>
+          <button id="restartBtn" class="restart">↺ Changer de vidéo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Erreur -->
+    <section id="errorSection" class="error-section hidden">
+      <h2>❌ Une erreur est survenue</h2>
+      <pre id="errorMsg"></pre>
+      <button id="errorRestartBtn" class="restart">Réessayer</button>
+    </section>
+
+    <!-- Modal : éditeur de sous-titres (cues) -->
+    <div id="editModal" class="modal-overlay hidden">
+      <div class="modal">
+        <h3>✏️ Éditeur de sous-titres</h3>
+        <p class="modal-hint">Corrige le texte, ajuste le <b>début</b>/<b>fin</b> (en secondes), supprime (✕) ou <b>ajoute</b> une ligne. La vidéo se cale sur le temps que tu modifies (👁 pour voir une ligne).</p>
+        <div class="edit-video-wrap">
+          <video id="editVideo" class="edit-video" controls preload="metadata" playsinline></video>
+          <div id="editOverlay" class="edit-overlay"></div>
+        </div>
+        <div class="cues-head">
+          <span></span><span>Début</span><span>Fin</span><span>Texte</span><span></span>
+        </div>
+        <div class="cues-edit" id="cuesEdit"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="editRegen" title="Recréer automatiquement les sous-titres">↻ Redécouper auto</button>
+          <button type="button" class="btn-secondary" id="editAdd">＋ Ajouter une ligne</button>
+          <span style="flex:1"></span>
+          <button type="button" class="btn-secondary" id="editCancel">Annuler</button>
+          <button type="button" class="btn-primary" id="editSave">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
