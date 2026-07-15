@@ -97,9 +97,13 @@ respirations, fins de phrase — pour coller à l'intonation et au rythme.
 
 ### Calage du surlignage sur la voix
 En mode mot à mot, chaque mot s'allume sur le **timing réel donné par Whisper** (et non sur une
-estimation), puis reste surligné jusqu'au mot suivant — les petits silences internes à un bloc sont
-absorbés plutôt que de faire clignoter le texte. L'aperçu du studio utilise exactement les mêmes
-timings que le rendu final.
+estimation), puis reste surligné jusqu'au mot suivant. L'aperçu du studio utilise exactement les
+mêmes timings que le rendu final.
+
+**Le texte ne disparaît pas pendant les blancs** : un bloc reste affiché jusqu'à l'apparition du
+suivant, donc les respirations et pauses courtes ne font plus clignoter les sous-titres. Au-delà de
+`maxHold` (2 s par défaut, dans `DEFAULTS` de [`src/subtitles.js`](src/subtitles.js)), c'est un vrai
+silence — changement de scène, musique — et l'écran se vide.
 
 Si tu **corriges le texte d'un bloc à la main** dans l'éditeur, ses timings mot à mot ne
 correspondent plus : ce bloc-là (et lui seul) retombe sur une répartition approximative, au prorata

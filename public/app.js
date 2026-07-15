@@ -20,6 +20,8 @@ const FONTS = [
   'Archivo Black', 'Luckiest Guy', 'Playfair Display', 'Arial Black', 'Impact', 'Arial', 'Verdana',
 ];
 const FALLBACK_CUES = [{ start: 0, end: 3, text: 'Ceci est un aperçu de ton style' }];
+// Doit rester aligné sur DEFAULTS.maxHold dans src/subtitles.js.
+const MAX_HOLD = 2;
 
 let selectedFile = null;
 let jobId = null;
@@ -318,9 +320,16 @@ function buildSequence() {
   const charsPerLine = Math.max(8, Math.round(16 / (opt.fontScale || 1)));
   const src = (cues && cues.length) ? cues : FALLBACK_CUES;
   const seq = [];
-  for (const cue of src) {
+  for (let i = 0; i < src.length; i++) {
+    const cue = src[i];
     const ci = cueToLines(cue, charsPerLine);
     if (!ci.n) continue;
+    // Maintien du texte pendant les blancs, jusqu'au bloc suivant (même règle
+    // que displayEnds() côté rendu). Le dernier bloc garde une courte sortie.
+    const next = src[i + 1];
+    const holdMs = next
+      ? Math.max(0, Math.min(next.start - cue.end, MAX_HOLD)) * 1000
+      : 200;
     if (isWord) {
       const durs = wordDursMs(cue, ci.n);
       for (let g = 0; g < ci.n; g++) {
@@ -329,9 +338,9 @@ function buildSequence() {
           : Math.max(170, Math.min(650, (ci.dur * 1000) / ci.n));
         seq.push({ lines: ci.lines, active: g, start: g === 0, dur: per });
       }
-      seq.push({ lines: ci.lines, active: ci.n - 1, start: false, dur: 200 });
+      if (holdMs > 8) seq.push({ lines: ci.lines, active: ci.n - 1, start: false, dur: holdMs });
     } else {
-      seq.push({ lines: ci.lines, active: -1, start: true, dur: Math.max(900, ci.dur * 1000) });
+      seq.push({ lines: ci.lines, active: -1, start: true, dur: Math.max(900, ci.dur * 1000) + holdMs });
     }
   }
   if (!seq.length) seq.push({ lines: [[{ text: 'APERÇU', gi: 0 }]], active: 0, start: true, dur: 400 });

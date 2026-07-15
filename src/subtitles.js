@@ -16,6 +16,7 @@ const DEFAULTS = {
   box: false,
   maxWords: 4,
   punctuation: false,      // false = ponctuation retirée (plus fluide)
+  maxHold: 2,              // s : durée max de maintien du texte sur un blanc
 };
 
 function resolve(o = {}) {
@@ -139,7 +140,20 @@ function groupWords(words, { maxWords = 4, maxGap = 0.35, maxDur = 3.5, maxChars
     chars += (chars ? 1 : 0) + w.word.length;
   }
   if (cur.length) lines.push(cur);
-  return lines;
+  return mergePunctOnly(lines);
+}
+
+// Whisper isole la ponctuation française (« … la personne ? ») en « mot » à part,
+// que le découpage peut laisser seul dans son bloc. Un tel bloc s'afficherait
+// comme un « ? » orphelin — et, ponctuation retirée, deviendrait un bloc vide qui
+// coupe le maintien du texte. On le rattache au bloc précédent.
+function mergePunctOnly(lines) {
+  const out = [];
+  for (const g of lines) {
+    if (out.length && g.every((w) => !stripPunct(w.word))) out[out.length - 1].push(...g);
+    else out.push(g);
+  }
+  return out;
 }
 
 // Faux génériques de sous-titrage que Whisper "hallucine" sur les silences /
@@ -255,6 +269,19 @@ function spreadByLength(cue, wo) {
   return times;
 }
 
+// Fin d'AFFICHAGE de chaque bloc (≠ fin de la parole) : le texte reste à l'écran
+// pendant les blancs, jusqu'à l'apparition du bloc suivant — sinon il clignote à
+// chaque respiration. Au-delà de maxHold, c'est un vrai silence (changement de
+// scène, musique) : on laisse l'écran se vider. Le dernier bloc n'est pas
+// prolongé, il n'y a plus de mot à attendre.
+function displayEnds(cues, maxHold) {
+  return cues.map((c, i) => {
+    const next = cues[i + 1];
+    if (!next) return c.end;
+    return Math.max(c.end, Math.min(next.start, c.end + maxHold));
+  });
+}
+
 // Découpe une liste de mots en lignes tenant chacune dans maxChars caractères.
 function splitWordsToLines(wordObjs, maxChars) {
   const lines = [[]];
@@ -345,25 +372,30 @@ export function buildAss(cues, options, dim, clip) {
     }));
   }
 
+  // Blocs réellement affichables : un bloc vide (ponctuation seule, retirée) ne
+  // doit pas compter comme « suivant » et rouvrir un trou dans le maintien.
+  const items = cues.map((cue) => ({ cue, wo: tokens(cue.text) })).filter((x) => x.wo.length);
+  const ends = displayEnds(items.map((x) => x.cue), Math.max(0, Number(o.maxHold) || 0));
+
   if (o.mode === 'segment') {
     const ent = entrance(o.animation === 'none' ? 'none' : (o.animation || 'fade'));
-    for (const cue of cues) {
-      const wo = tokens(cue.text);
-      if (!wo.length) continue;
+    for (let ci = 0; ci < items.length; ci++) {
+      const { cue, wo } = items[ci];
       const lines = splitWordsToLines(wo, charsPerLine);
       const text = lines.map((line) => line.map((x) => x.text).join(' ')).join('\\N');
-      emit(cue.start, cue.end, text, ent);
+      emit(cue.start, ends[ci], text, ent);
     }
   } else {
     const hi = inlineColor(o.highlightColor);
     const baseCol = inlineColor(o.textColor);
     const ent = entrance(o.animation);
-    for (const cue of cues) {
-      const wo = tokens(cue.text);
+    for (let ci = 0; ci < items.length; ci++) {
+      const { cue, wo } = items[ci];
       const n = wo.length;
-      if (!n) continue;
       // Timings réels de la voix ; à défaut seulement, répartition approximative.
       const times = wordBounds(cue, cueWords(cue, strip), n) || spreadByLength(cue, wo);
+      // Le dernier mot du bloc reste affiché (et surligné) pendant le blanc.
+      times[n] = Math.max(times[n], ends[ci]);
       const lines = splitWordsToLines(wo, charsPerLine);
       for (let k = 0; k < n; k++) {
         const start = times[k];
