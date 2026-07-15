@@ -95,6 +95,16 @@ mot à mot / phrase entière.
 Les sous-titres sont découpés en **blocs (cues)** aux frontières naturelles — pauses,
 respirations, fins de phrase — pour coller à l'intonation et au rythme.
 
+### Calage du surlignage sur la voix
+En mode mot à mot, chaque mot s'allume sur le **timing réel donné par Whisper** (et non sur une
+estimation), puis reste surligné jusqu'au mot suivant — les petits silences internes à un bloc sont
+absorbés plutôt que de faire clignoter le texte. L'aperçu du studio utilise exactement les mêmes
+timings que le rendu final.
+
+Si tu **corriges le texte d'un bloc à la main** dans l'éditeur, ses timings mot à mot ne
+correspondent plus : ce bloc-là (et lui seul) retombe sur une répartition approximative, au prorata
+de la longueur des mots. Les blocs laissés intacts gardent le calage exact.
+
 ### Ponctuation
 **Retirée par défaut** (plus fluide à l'écran). Case **« Garder la ponctuation »** pour la
 réactiver. Les apostrophes (c'est) et traits d'union (peut-être) sont toujours conservés.

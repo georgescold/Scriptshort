@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { transcribeJob, renderJob, checkDependencies } from './src/process.js';
-import { buildCues } from './src/subtitles.js';
+import { buildCues, attachWords } from './src/subtitles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JOBS_DIR = path.join(__dirname, 'jobs');
@@ -112,8 +112,10 @@ app.post('/api/jobs/:id/cues', (req, res) => {
     .sort((a, b) => a.start - b.start);
   if (!cues.length) return res.status(400).json({ error: 'Aucun sous-titre valide.' });
 
-  job.cues = cues;
-  res.json({ ok: true, cueCount: cues.length, cues });
+  // Le navigateur ne renvoie que start/end/text : on rattache les timings mot à
+  // mot d'origine pour les blocs restés intacts (surlignage calé sur la voix).
+  job.cues = attachWords(cues, job.words || []);
+  res.json({ ok: true, cueCount: job.cues.length, cues: job.cues });
 });
 
 // Sert la vidéo d'origine (pour la prévisualiser dans l'éditeur de sous-titres)
