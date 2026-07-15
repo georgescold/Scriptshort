@@ -160,6 +160,8 @@ function isHallucination(text) {
 }
 
 // Construit les cues (blocs éditables) à partir des mots normalisés.
+// Chaque cue conserve les timings réels de Whisper mot par mot (`words`) :
+// c'est ce qui permet au surlignage de coller à la voix (voir wordBounds).
 export function buildCues(words, opts = {}) {
   const groups = groupWords(words, {
     maxWords: opts.maxWords || 4,
@@ -172,8 +174,62 @@ export function buildCues(words, opts = {}) {
       start: g[0].start,
       end: g[g.length - 1].end,
       text: g.map((w) => w.word).join(' '),
+      words: g.map((w) => ({ start: w.start, end: w.end, word: w.word })),
     }))
     .filter((c) => !isHallucination(c.text)); // retire les faux génériques
+}
+
+function normText(s) {
+  return stripPunct(String(s || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Après édition manuelle, les cues reviennent du navigateur sans leurs timings
+// mot à mot. On les rattache depuis la transcription d'origine quand le texte du
+// bloc est resté intact ; sinon on laisse `words` vide et le rendu retombe sur la
+// répartition proportionnelle (cas d'un texte corrigé ou d'un bloc ajouté).
+export function attachWords(cues, allWords) {
+  const all = Array.isArray(allWords) ? allWords : [];
+  return cues.map((c) => {
+    const bare = { start: c.start, end: c.end, text: c.text };
+    const inRange = all.filter((w) => {
+      const mid = (w.start + w.end) / 2;
+      return mid >= c.start - 1e-6 && mid <= c.end + 1e-6;
+    });
+    if (!inRange.length) return bare;
+    if (normText(inRange.map((w) => w.word).join(' ')) !== normText(c.text)) return bare;
+    return { ...bare, words: inRange.map((w) => ({ start: w.start, end: w.end, word: w.word })) };
+  });
+}
+
+// Mots du bloc réellement affichés à l'écran. Whisper isole parfois la
+// ponctuation en « mot » à part (« doigts levé ? ») : elle disparaît du texte
+// quand la ponctuation est retirée, donc elle ne doit pas compter ici non plus.
+export function cueWords(cue, strip) {
+  const ws = Array.isArray(cue.words) ? cue.words : null;
+  if (!ws) return null;
+  return strip ? ws.filter((w) => stripPunct(w.word)) : ws;
+}
+
+// Bornes de surlignage d'un bloc, calées sur la voix : le mot i s'allume à son
+// `start` réel et le reste jusqu'au début du mot suivant — les silences internes
+// au bloc sont absorbés par le mot en cours plutôt que de le faire clignoter.
+// Renvoie n+1 bornes, ou null si les timings sont absents/incohérents (→ repli).
+export function wordBounds(cue, words, n) {
+  const ws = Array.isArray(words) ? words : null;
+  if (!ws || ws.length !== n || n < 1) return null;
+  const t = new Array(n + 1);
+  t[0] = cue.start;
+  for (let i = 1; i < n; i++) {
+    const s = Number(ws[i].start);
+    if (!Number.isFinite(s)) return null;
+    t[i] = s;
+  }
+  t[n] = cue.end;
+  // Whisper renvoie parfois des bornes égales ou inversées sur les mots très
+  // courts : on force la monotonie, et on abandonne si ça déborde du bloc.
+  for (let i = 1; i <= n; i++) if (t[i] <= t[i - 1]) t[i] = t[i - 1] + 0.01;
+  if (t[n] > cue.end + 1e-6) return null;
+  return t;
 }
 
 function entrance(anim) {
@@ -183,6 +239,20 @@ function entrance(anim) {
     case 'bounce': return '\\fscx45\\fscy45\\t(0,95,\\fscx100\\fscy100)\\t(95,155,\\fscx91\\fscy91)\\t(155,215,\\fscx100\\fscy100)\\fad(45,0)';
     default: return '';
   }
+}
+
+// Repli quand les timings mot à mot sont indisponibles (texte corrigé à la main,
+// bloc ajouté) : la durée du bloc est répartie au prorata de la longueur des
+// mots. Approximatif — la voix ne suit pas le nombre de lettres.
+function spreadByLength(cue, wo) {
+  const total = Math.max(0.05, cue.end - cue.start);
+  const weights = wo.map((x) => Math.max(1, x.text.length));
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  const times = [];
+  let t = cue.start;
+  for (let i = 0; i < wo.length; i++) { times.push(t); t += total * weights[i] / sumW; }
+  times.push(cue.end);
+  return times;
 }
 
 // Découpe une liste de mots en lignes tenant chacune dans maxChars caractères.
@@ -292,14 +362,8 @@ export function buildAss(cues, options, dim, clip) {
       const wo = tokens(cue.text);
       const n = wo.length;
       if (!n) continue;
-      // Répartition du temps du bloc sur ses mots (pondérée par la longueur).
-      const total = Math.max(0.05, cue.end - cue.start);
-      const weights = wo.map((x) => Math.max(1, x.text.length));
-      const sumW = weights.reduce((a, b) => a + b, 0);
-      const times = [];
-      let t = cue.start;
-      for (let i = 0; i < n; i++) { const dur = total * weights[i] / sumW; times.push(t); t += dur; }
-      times.push(cue.end);
+      // Timings réels de la voix ; à défaut seulement, répartition approximative.
+      const times = wordBounds(cue, cueWords(cue, strip), n) || spreadByLength(cue, wo);
       const lines = splitWordsToLines(wo, charsPerLine);
       for (let k = 0; k < n; k++) {
         const start = times[k];

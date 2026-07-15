@@ -289,6 +289,30 @@ function cueToLines(cue, charsPerLine) {
   return { lines, n: gi, dur: (cue.end - cue.start) || 1.5 };
 }
 
+// Durées de surlignage (ms) calées sur la voix — mêmes bornes que wordBounds()
+// côté rendu, pour que l'aperçu montre le rythme réel de la vidéo.
+// Renvoie null si les timings sont absents/incohérents (→ repli approximatif).
+function wordDursMs(cue, n) {
+  let ws = Array.isArray(cue.words) ? cue.words : null;
+  if (!ws) return null;
+  // La ponctuation isolée par Whisper (« levé », « ? ») n'est pas affichée quand
+  // la ponctuation est retirée : elle ne compte pas comme un mot ici non plus.
+  if (!opt.punctuation) ws = ws.filter((w) => stripPunctJS(w.word));
+  if (ws.length !== n || n < 1) return null;
+  const t = [cue.start];
+  for (let i = 1; i < n; i++) {
+    const s = Number(ws[i].start);
+    if (!Number.isFinite(s)) return null;
+    t.push(s);
+  }
+  t.push(cue.end);
+  for (let i = 1; i <= n; i++) if (t[i] <= t[i - 1]) t[i] = t[i - 1] + 0.01;
+  if (t[n] > cue.end + 1e-6) return null;
+  const out = [];
+  for (let i = 0; i < n; i++) out.push((t[i + 1] - t[i]) * 1000);
+  return out;
+}
+
 function buildSequence() {
   const isWord = opt.mode === 'word';
   const charsPerLine = Math.max(8, Math.round(16 / (opt.fontScale || 1)));
@@ -298,8 +322,13 @@ function buildSequence() {
     const ci = cueToLines(cue, charsPerLine);
     if (!ci.n) continue;
     if (isWord) {
-      const per = Math.max(170, Math.min(650, (ci.dur * 1000) / ci.n));
-      for (let g = 0; g < ci.n; g++) seq.push({ lines: ci.lines, active: g, start: g === 0, dur: per });
+      const durs = wordDursMs(cue, ci.n);
+      for (let g = 0; g < ci.n; g++) {
+        const per = durs
+          ? Math.max(60, durs[g])
+          : Math.max(170, Math.min(650, (ci.dur * 1000) / ci.n));
+        seq.push({ lines: ci.lines, active: g, start: g === 0, dur: per });
+      }
       seq.push({ lines: ci.lines, active: ci.n - 1, start: false, dur: 200 });
     } else {
       seq.push({ lines: ci.lines, active: -1, start: true, dur: Math.max(900, ci.dur * 1000) });
